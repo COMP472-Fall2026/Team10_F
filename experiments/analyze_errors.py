@@ -5,18 +5,22 @@ import matplotlib
 matplotlib.use("Agg")  # Save figures to files without opening a window
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np
+import torch
 
+from experiments.run_nn import scale_features
+from make_submission import NN_SETTINGS
 from src.data import load_dataset
 from src.metrics import accuracy, confusion_matrix, per_class_accuracy
-from src.models import decision_tree, knn, random_forest
+from src.models import decision_tree, knn, neural_network, random_forest
 from src.split import stratified_split
 
 
 def predict_val(name, model, **params):
     """Split the dataset, train the model on the train part only and predict the validation set.
 
-    model  : "knn" (params k, weighted), "tree" (param max_depth)
-             or "forest" (params n_trees, max_depth, n_features)
+    model  : "knn" (params k, weighted), "tree" (param max_depth),
+             "forest" (params n_trees, max_depth, n_features)
+             or "mlp" (param scaling + the settings of neural_network.fit)
     Returns: (y_val, y_pred), two arrays of length n_val
     """
     X_train, y_train, _, _ = load_dataset(name)
@@ -35,8 +39,14 @@ def predict_val(name, model, **params):
         forest = random_forest.build_forest(X_tr, y_tr, n_classes, n_trees=params["n_trees"], max_depth=params["max_depth"],
                                             n_features=params["n_features"], verbose=False)
         y_pred = random_forest.predict(forest, X_val)
+    elif model == "mlp":
+        X_tr_scaled, X_val_scaled = scale_features(X_tr, X_val, params.pop("scaling"))
+        X_val_tensor = torch.tensor(X_val_scaled, dtype=torch.float32)
+        network, _ = neural_network.fit(torch.tensor(X_tr_scaled, dtype=torch.float32), torch.tensor(y_tr, dtype=torch.long),
+                                        X_val_tensor, torch.tensor(y_val, dtype=torch.long), **params)
+        y_pred = neural_network.predict(network, X_val_tensor)
     else:
-        raise ValueError(f"unknown model : {model} (expected 'knn', 'tree' or 'forest')")
+        raise ValueError(f"unknown model : {model} (expected 'knn', 'tree', 'forest' or 'mlp')")
     return y_val, y_pred
 
 
@@ -91,8 +101,9 @@ def save_confusion_plot(cm, title, path):
 def analyze(name, model, n_show=5, **params):
     """Print the accuracy, the per-class accuracy and the main confusions of a model on the validation set.
 
-    model  : "knn" (params k, weighted), "tree" (param max_depth)
-             or "forest" (params n_trees, max_depth, n_features)
+    model  : "knn" (params k, weighted), "tree" (param max_depth),
+             "forest" (params n_trees, max_depth, n_features)
+             or "mlp" (param scaling + the settings of neural_network.fit)
     Returns: nothing, prints the results and saves the confusion matrix plot in figures/
     """
     y_val, y_pred = predict_val(name, model, **params)
@@ -128,3 +139,6 @@ if __name__ == "__main__":
     # Random Forest: settings chosen in run_forest.py (a few minutes each)
     analyze("sentiment", "forest", n_trees=100, max_depth=None, n_features="sqrt")
     analyze("image", "forest", n_trees=300, max_depth=None, n_features="sqrt")
+    # MLP: settings chosen in run_nn.py, shared with make_submission.py
+    analyze("sentiment", "mlp", **NN_SETTINGS["sentiment"])
+    analyze("image", "mlp", **NN_SETTINGS["image"])
