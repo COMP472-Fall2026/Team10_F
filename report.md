@@ -636,3 +636,77 @@ I asked Claude to act as a tutor: explain each algorithm on a small hand-worked 
 > J'ai écrit le brouillon complet dans report.md, à la racine du repo. [...] Tous les chiffres viennent des CSV, des figures et des scripts que j'ai relancés aujourd'hui. [...]
 > **Avant de rendre :**
 > - **Relis tout.** Les interprétations sont de moi, et le TA va te questionner sur ce qui est écrit. Si une phrase ne te ressemble pas ou si tu ne saurais pas l'expliquer, on la reformule. [...]
+
+### Quentin Lapierre
+
+**Model:** Claude (Anthropic), used through Claude Code in my terminal.
+
+I had programming experience (C, C++, TypeScript) but had barely used Python and had never trained a neural network, so I used Claude as a tutor for the MLP part. What it did, precisely:
+
+- **Explanations**: it explained the concepts (standard deviation, standardization, train/validation split, training loop, learning rate, overfitting, dropout, weight decay), with diagrams, and quizzed me after each step; it corrected my answers.
+- **Exploration notebook** (not submitted): Claude also helped me with a step-by-step notebook that I ran and studied (data preparation, model, training loop, experiments, error analysis).
+- **`src/models/neural_network.py`**: written by me, function by function. Claude gave the specification of each function and reviewed my code; it found two bugs (`append` instead of `+=` when building the layers, and a `train_final` that wrongly picked the best epoch on the training accuracy).
+
+I ran every experiment myself and checked that the scripts reproduce the reported numbers. My prompts were in French; they are translated below.
+
+#### Exchange 1:
+
+**Prompt**
+
+> I have programming basics (C/C++/TypeScript) but I have barely touched Python and never touched neural networks. I will need help for this project.
+
+**Response**
+
+Claude proposed to build the code together, step by step, so that I could explain every line during the presentation, and reminded me that AI assistance must be acknowledged in the report. It explained a neural network in programmer's terms (a function made of matrix multiplications whose weights are adjusted to reduce a loss), set up a Python 3.12 environment with the versions of `requirements.txt`, and reused the team's `load_dataset`, `stratified_split` and `standardize` so that the MLP is validated on exactly the same split as the other models. Each step of the notebook ended with exercises.
+
+#### Exchange 2:
+
+**Prompt**
+
+> I don't fully understand how the model is trained. Validation, standardization and standard deviation are still unclear to me. Can you explain with a diagram?
+
+**Response**
+
+Claude explained the standard deviation with two sets of grades with the same mean, standardization as putting every feature on the same scale (`z = (x − mean) / std`, computed on the training part only to avoid data leakage), and the train / validation / test split as "the course, the mock exam and the final exam". It drew the training loop as four steps repeated on each batch (predict, measure the error with the loss, compute the gradients with `backward`, update the weights with the optimizer), and showed how to read the training and validation curves to recognize overfitting and underfitting.
+
+#### Exchange 3:
+
+**Prompt**
+
+> ### Question (by Claude)
+> Which sentiment class is the most difficult? Which other classes is it often confused with, and why does that make sense?
+> 
+> ### Answer (by me)
+> The most difficult class is “neutral.” It is often confused with the other two classes (positive and negative), and that’s normal. “Neutral” lies between the other two, so the sentiment becomes more mixed.
+
+**Response**
+
+Claude confirmed my answer and pointed to the confusion matrix: "neutral" is confused with both other classes (171 neutral reviews predicted negative and 181 predicted positive), while "negative" and "positive" are rarely confused with each other (54 and 88). It suggested one more sentence for the presentation: a neutral or mixed review often contains a bit of both sentiments ("the movie was okay, nothing more"), so the boundary is blurry on both sides. It also linked this to how the features are built: a sentence vector is the mean of its BERT token vectors, so "this movie is great" and "this movie is not great" differ by one word out of six and get very close vectors. Similar vectors can therefore have opposite sentiments, which is why the network, which can learn that a few small directions (like negation) matter, beats k-NN on this task.
+
+#### Exchange 4:
+
+**Prompt**
+
+> ### Question (by Claude)
+> Train the network with `lr = 1e-1`, `1e-3` and `1e-5` and compare the curves.
+>
+> ### Answer (by me)
+> Here are the 3 plots. We can see that the smaller the step, the more accurate the model. And we can really see the difference with `1e-5`, which shows that the model follows the training curve quite well.
+
+**Response**
+
+Claude said that my observations were right but that the conclusion needed nuance: a smaller step does not automatically give a more accurate model, the best setting lies between the two extremes. It compared the best validation accuracy of each run. With `1e-1` (about 61%), the curves zigzag and the validation loss explodes, because the steps are so large that the model jumps over the good weights. With `1e-3` (about 67%), the model learns very fast, reaches its best score at epoch 1 and then overfits. With `1e-5` (also about 67%), the two curves stay close, so the model generalizes well, but it is slow and still improving at epoch 30, which is closer to underfitting. Since both `1e-3` and `1e-5` cap at about 67%, it explained that changing the step size alone would not go further and that the next step was to limit memorization with dropout and weight decay.
+
+#### Exchange 5:
+
+**Prompt**
+
+> ### Question (by Claude)
+> On the image task, the same `[1024]` network gets 39.3% with standardized features and 40.2% with raw features. Why can standardization hurt here?
+>
+> ### Answer (by me)
+> Because standardization tends to give too much importance to "noise" (insignificant features).
+
+**Response**
+
+Claude said the answer was correct and suggested adding the mechanism to make it complete: standardization divides each column by its standard deviation, so a column that is almost always 0 has a tiny standard deviation, and its rare non-zero values get inflated (a 0.01 divided by 0.002 becomes 5). It connected this to the data: the image features are non-negative, 85% zeros, and each row already has length 1. The k-NN of my teammates shows the same effect more strongly (52% raw against 43% standardized).
